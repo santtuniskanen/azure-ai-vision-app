@@ -1,74 +1,74 @@
-﻿using Azure;
-using Azure.AI.Vision.Common;
-using Azure.AI.Vision.ImageAnalysis;
+﻿using System;
+using System.Collections.Generic;
+using Microsoft.Azure.CognitiveServices.Vision.ComputerVision;
+using Microsoft.Azure.CognitiveServices.Vision.ComputerVision.Models;
+using System.Threading.Tasks;
+using System.IO;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System.Threading;
+using System.Linq;
 
-class Program
+namespace ComputerVisionQuickstart
 {
-    static void AnalyzeImage()
+    class Program
     {
-        var serviceOptions = new VisionServiceOptions(
-            Environment.GetEnvironmentVariable("VISION_ENDPOINT"),
-            new AzureKeyCredential(Environment.GetEnvironmentVariable("VISION_KEY")));
+        // Add your Computer Vision key and endpoint
+        static string key = Environment.GetEnvironmentVariable("VISION_KEY");
+        static string endpoint = Environment.GetEnvironmentVariable("VISION_ENDPOINT");
 
-        using var imageSource = VisionSource.FromUrl(
-            new Uri("https://learn.microsoft.com/azure/ai-services/computer-vision/media/quickstarts/presentation.png"));
+        // URL image used for analyzing an image (image of puppy)
+        private const string ANALYZE_URL_IMAGE = "https://moderatorsampleimages.blob.core.windows.net/samples/sample16.png";
 
-        var analysisOptions = new ImageAnalysisOptions()
+        static void Main(string[] args)
         {
-            Features = ImageAnalysisFeature.Caption | ImageAnalysisFeature.Text,
+            Console.WriteLine("Azure Cognitive Services Computer Vision - .NET quickstart example");
+            Console.WriteLine();
 
-            Language = "en",
+            // Create a client
+            ComputerVisionClient client = Authenticate(endpoint, key);
 
-            GenderNeutralCaption = true
-        };
+            // Analyze an image to get features and other properties.
+            AnalyzeImageUrl(client, ANALYZE_URL_IMAGE).Wait();
+        }
 
-        using var analyzer = new ImageAnalyzer(serviceOptions, imageSource, analysisOptions);
-
-        var result = analyzer.Analyze();
-
-        if (result.Reason == ImageAnalysisResultReason.Analyzed)
+        /*
+         * AUTHENTICATE
+         * Creates a Computer Vision client used by each example.
+         */
+        public static ComputerVisionClient Authenticate(string endpoint, string key)
         {
-            if (result.Caption != null)
+            ComputerVisionClient client =
+              new ComputerVisionClient(new ApiKeyServiceClientCredentials(key))
+              { Endpoint = endpoint };
+            return client;
+        }
+       
+        public static async Task AnalyzeImageUrl(ComputerVisionClient client, string imageUrl)
+        {
+            Console.WriteLine("----------------------------------------------------------");
+            Console.WriteLine("ANALYZE IMAGE - URL");
+            Console.WriteLine();
+
+            // Creating a list that defines the features to be extracted from the image. 
+
+            List<VisualFeatureTypes?> features = new List<VisualFeatureTypes?>()
             {
-                Console.WriteLine(" Caption:");
-                Console.WriteLine($"   \"{result.Caption.Content}\", Confidence {result.Caption.Confidence:0.0000}");
-            }
+                VisualFeatureTypes.Tags
+            };
 
-            if (result.Text != null)
+            Console.WriteLine($"Analyzing the image {Path.GetFileName(imageUrl)}...");
+            Console.WriteLine();
+            // Analyze the URL image 
+            ImageAnalysis results = await client.AnalyzeImageAsync(imageUrl, visualFeatures: features);
+
+            // Image tags and their confidence score
+            Console.WriteLine("Tags:");
+            foreach (var tag in results.Tags)
             {
-                Console.WriteLine($" Text:");
-                foreach (var line in result.Text.Lines)
-                {
-                    string pointsToString = "{" + string.Join(',', line.BoundingPolygon.Select(pointsToString => pointsToString.ToString())) + "}";
-                    Console.WriteLine($"   Line: '{line.Content}', Bounding polygon {pointsToString}");
-
-                    foreach (var word in line.Words)
-                    {
-                        pointsToString = "{" + string.Join(',', word.BoundingPolygon.Select(pointsToString => pointsToString.ToString())) + "}";
-                        Console.WriteLine($"     Word: '{word.Content}', Bounding polygon {pointsToString}, Confidence {word.Confidence:0.0000}");
-                    }
-                }
+                Console.WriteLine($"{tag.Name} {tag.Confidence}");
             }
-        }
-        else
-        {
-            var errorDetails = ImageAnalysisErrorDetails.FromResult(result);
-            Console.WriteLine(" Analysis failed.");
-            Console.WriteLine($"   Error reason : {errorDetails.Reason}");
-            Console.WriteLine($"   Error code : {errorDetails.ErrorCode}");
-            Console.WriteLine($"   Error message: {errorDetails.Message}");
-        }
-    }
-
-    static void Main()
-    {
-        try
-        {
-            AnalyzeImage();
-        }
-        catch (Exception e)
-        {
-            Console.WriteLine(e);
+            Console.WriteLine();
         }
     }
 }
